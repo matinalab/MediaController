@@ -1,36 +1,26 @@
 # Media Speed Controller
 
+> English | [中文文档](README.zh-CN.md)
+
 Lightweight userscript for controlling HTML5 media playback speed.
-
-## Features
-
-- Increase speed with `C`
-- Decrease speed with `X`
-- Toggle `1x` / last speed with `Z`
-- Set preset speed with `1` - `4`
-- Rapidly pressing `1` - `4` stacks the target rate, for example `2`, `2` -> `4x`
-- Keeps the target speed stable during fast key presses
-- Applies the target speed to all `video` and `audio` elements on the page
-- Shows a small feedback label at the top-left corner of the active media element
 
 ## Install
 
-After pushing this repository to GitHub, install from:
+1. Install the [Tampermonkey browser extension](https://www.tampermonkey.net/).
+2. Open the [latest release download](https://github.com/matinalab/MediaSpeedController/releases/latest/download/media-speed-controller.user.js).
+3. Confirm the installation in Tampermonkey.
 
-```text
-https://raw.githubusercontent.com/matinalab/MediaSpeedController/main/media-speed-controller.user.js
-```
+The userscript is also available as `media-speed-controller.user.js` in each GitHub Release.
 
-Or install manually by copying `media-speed-controller.user.js` into Tampermonkey / Violentmonkey.
+## Features
 
-## Performance Notes
-
-- No runtime dependencies
-- No build step required
-- No global API exposed to the page
-- One `MutationObserver` watches for newly inserted `video` / `audio` elements
-- One feedback DOM node is created only after the first visible speed change
-- The metadata icon is an inline SVG used by the userscript manager only
+- Increase speed with `C`.
+- Decrease speed with `X`.
+- Toggle `1x` and the last non-`1x` speed with `Z`.
+- Set or stack preset speeds with `1` - `4`.
+- Keep the keyboard target speed stable during rapid key presses.
+- Apply the target speed to all `video` and `audio` elements on the page.
+- Show a small speed label at the top-left corner of the active media element.
 
 ## Shortcuts
 
@@ -43,6 +33,14 @@ Or install manually by copying `media-speed-controller.user.js` into Tampermonke
 | `2` | Set / stack `2x` |
 | `3` | Set / stack `3x` |
 | `4` | Set / stack `4x` |
+
+## Performance
+
+- No runtime dependencies.
+- No build step is required.
+- No global API is exposed to the page.
+- One `MutationObserver` watches for newly inserted media elements.
+- The feedback element is created only after the first visible speed change.
 
 ## License
 

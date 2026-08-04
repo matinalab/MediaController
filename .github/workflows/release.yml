@@ -1,0 +1,45 @@
+name: Publish latest userscript
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-latest-userscript
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Check userscript syntax
+        run: node --check media-speed-controller.user.js
+
+      - name: Publish latest GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag --force latest "$GITHUB_SHA"
+          git push origin refs/tags/latest --force
+
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest media-speed-controller.user.js --clobber
+            gh release edit latest \
+              --title "Latest release" \
+              --notes "Automatically updated from the latest repository revision." \
+              --latest
+          else
+            gh release create latest media-speed-controller.user.js \
+              --verify-tag \
+              --title "Latest release" \
+              --notes "Automatically updated from the latest repository revision." \
+              --latest
+          fi
