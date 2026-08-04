@@ -1,0 +1,14 @@
+{
+  "name": "media-speed-controller",
+  "version": "0.2.2",
+  "private": true,
+  "description": "Lightweight userscript for controlling HTML5 media playback speed.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/matinalab/MediaSpeedController.git"
+  },
+  "license": "MIT",
+  "scripts": {
+    "check": "node --check media-speed-controller.user.js"
+  }
+}
