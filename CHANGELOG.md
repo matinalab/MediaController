@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Add `Enter` to toggle fullscreen mode.
+- Add `N` to play the next video on supported sites.
+- Improve compatibility with site-provided media controls.
+- Reduce redundant work during rapid shortcut input and dynamic page updates.
+
 ## 0.3.0
 
 - Rename the project and userscript to `MediaController`.

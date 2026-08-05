@@ -1,8 +1,8 @@
 {
   "name": "media-controller",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "Lightweight userscript for controlling HTML5 media playback speed and volume.",
+  "description": "Lightweight userscript providing keyboard controls for HTML5 media playback.",
   "repository": {
     "type": "git",
     "url": "https://github.com/matinalab/MediaController.git"

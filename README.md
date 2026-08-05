@@ -2,7 +2,7 @@
 
 > English | [中文文档](README.zh-CN.md)
 
-Lightweight userscript for controlling playback speed and volume on HTML5 media.
+Lightweight userscript providing keyboard controls for HTML5 media playback.
 
 ## Install
 
@@ -17,6 +17,7 @@ The installation file is also included in every GitHub Release as `media-control
 - Adjust playback speed from `0.1x` to `16x`.
 - Toggle, adjust, or stack preset playback speeds with keyboard shortcuts.
 - Adjust standard volume or increase it up to `600%`.
+- Toggle fullscreen and play the next video with keyboard shortcuts.
 - Support HTML5 `video` and `audio` elements.
 - Show a discreet status label at the top-left corner of the active media element.
 
@@ -35,6 +36,8 @@ The installation file is also included in every GitHub Release as `media-control
 | `ArrowDown` | Decrease volume by `5%` |
 | `Ctrl + ArrowUp` | Increase volume by `20%` |
 | `Ctrl + ArrowDown` | Decrease volume by `20%` |
+| `Enter` | Toggle fullscreen |
+| `N` | Play the next video on supported sites |
 
 ## Compatibility
 

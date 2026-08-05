@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         MediaController
 // @namespace    https://github.com/matinalab/MediaController
-// @version      0.3.0
-// @description  Media playback speed and volume controller.
+// @version      0.4.0
+// @description  Keyboard controls for HTML5 media playback.
 // @match        *://*/*
 // @icon         data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Cpath d='M18 44V20l22 12-22 12Z' fill='%23fff'/%3E%3Cpath d='M43 18h5v28h-5z' fill='%2393c5fd'/%3E%3C/svg%3E
 // @downloadURL  https://github.com/matinalab/MediaController/releases/latest/download/media-controller.user.js
@@ -32,8 +32,87 @@
   const FEEDBACK_TEXT = /^zh\b/i.test(navigator.language || '')
     ? { speed: '播放速度：', volume: '音量：' }
     : { speed: 'Speed: ', volume: 'Volume: ' }
+  const SITE_CONTROL_TASKS = [
+    {
+      domain: 'youtube.com',
+      fullScreen: ['button.ytp-fullscreen-button'],
+      next: ['.ytp-next-button']
+    },
+    {
+      domain: 'netflix.com',
+      fullScreen: ['button.button-nfplayerFullscreen']
+    },
+    {
+      domain: 'bilibili.com',
+      fullScreen: [
+        '.bpx-player-ctrl-full',
+        '.squirtle-video-fullscreen',
+        '.bilibili-player-video-btn-fullscreen',
+        'button[name="fullscreen-button"]',
+        '.bilibili-live-player-video-controller-fullscreen-btn button'
+      ],
+      next: [
+        '.bpx-player-ctrl-next',
+        '.squirtle-video-next',
+        '.bilibili-player-video-btn-next',
+        '.bpx-player-ctrl-btn[aria-label="下一个"]'
+      ]
+    },
+    { domain: 'acfun.cn', fullScreen: ['[data-bind-key="screenTip"]'] },
+    {
+      domain: 'ixigua.com',
+      fullScreen: [
+        'xg-fullscreen.xgplayer-fullscreen',
+        '.xgplayer-control-item__entry[aria-label="全屏"]',
+        '.xgplayer-control-item__entry[aria-label="退出全屏"]'
+      ]
+    },
+    { domain: 'tv.sohu.com', fullScreen: ['button[data-title="网页全屏"]'] },
+    {
+      domain: 'iqiyi.com',
+      fullScreen: ['.iqp-btn-fullscreen'],
+      next: ['.iqp-btn-next']
+    },
+    {
+      domain: 'youku.com',
+      fullScreen: ['.control-fullscreen-icon'],
+      next: ['.control-next-video']
+    },
+    { domain: 'ted.com', fullScreen: ['button.Fullscreen'] },
+    {
+      domain: 'qq.com',
+      fullScreen: ['txpdiv[data-report="window-fullscreen"]'],
+      next: ['txpdiv[data-report="play-next"]']
+    },
+    { domain: 'pan.baidu.com', fullScreen: ['.vjs-fullscreen-control'] },
+    {
+      domain: 'facebook.com',
+      fullScreen: media => {
+        const buttons = media.parentNode && media.parentNode.querySelectorAll('button')
+        if (!buttons || buttons.length <= 3) return false
+        buttons[buttons.length - 2].click()
+        return true
+      }
+    },
+    {
+      domain: 'douyu.com',
+      fullScreen: ['div[title="退出窗口全屏"]', 'div[title="窗口全屏"]']
+    },
+    { domain: 'chaoxing.com', fullScreen: ['.vjs-fullscreen-control'] },
+    {
+      domain: 'douyin.com',
+      fullScreen: ['.xgplayer-fullscreen'],
+      next: ['.xgplayer-playswitch-next']
+    },
+    {
+      domain: 'zhihu.com',
+      fullScreen: ['button[aria-label="全屏"]', 'button[aria-label="退出全屏"]']
+    },
+    { domain: 'weibo.com', fullScreen: ['button.wbpv-fullscreen-control'] }
+  ]
   const mediaElements = new Set()
   const mediaAmplifiers = new WeakMap()
+  const fullscreenContainers = new WeakMap()
   const presetPlaybackRateState = new Map()
 
   let targetPlaybackRate = normalizeRate(readStoredValue(
@@ -57,6 +136,7 @@
   let isInternalPlaybackRateWrite = false
   let feedbackTimer = 0
   let playbackRateRevision = 0
+  let playbackRateRetryTimers = []
 
   const playbackRateDescriptor = Object.getOwnPropertyDescriptor(
     HTMLMediaElement.prototype,
@@ -138,6 +218,133 @@
 
   function isMedia (node) {
     return node instanceof HTMLMediaElement
+  }
+
+  function getSiteControlTask (taskName) {
+    const hostname = String(window.location && window.location.hostname || '').toLowerCase()
+    const site = SITE_CONTROL_TASKS.find(item => (
+      hostname === item.domain || hostname.endsWith('.' + item.domain)
+    ))
+    return site && site[taskName] ? site[taskName] : []
+  }
+
+  function getMediaWrap (media) {
+    if (!media || !media.getBoundingClientRect) return null
+
+    const mediaRect = media.getBoundingClientRect()
+    let wrap = null
+    let parent = media.parentNode
+    while (parent && parent !== document && parent.getBoundingClientRect) {
+      const parentRect = parent.getBoundingClientRect()
+      if (parentRect.width && parentRect.height &&
+        parentRect.width === mediaRect.width && parentRect.height === mediaRect.height) {
+        wrap = parent
+      }
+      parent = parent.parentNode
+    }
+    return wrap
+  }
+
+  function runSiteControlTask (taskName, media) {
+    const task = getSiteControlTask(taskName)
+    if (typeof task === 'function') {
+      try {
+        return task(media) === true
+      } catch (_) {
+        return false
+      }
+    }
+    if (!task.length) return false
+
+    const wrap = getMediaWrap(media)
+
+    for (const selector of task) {
+      const control = (wrap && wrap.querySelector(selector)) || document.querySelector(selector)
+      if (control) {
+        control.click()
+        return true
+      }
+    }
+    return false
+  }
+
+  function getFullscreenContainer (media) {
+    if (fullscreenContainers.has(media)) return fullscreenContainers.get(media)
+
+    const mediaRect = media.getBoundingClientRect()
+    let container = media
+    let parent = media.parentNode
+    while (parent && parent.classList && parent.getBoundingClientRect) {
+      if (parent.getAttribute && parent.getAttribute('data-fullscreen-container')) {
+        container = parent
+        break
+      }
+
+      const parentRect = parent.getBoundingClientRect()
+      if (parentRect.width <= mediaRect.width && parentRect.height <= mediaRect.height) {
+        container = parent
+        parent = parent.parentNode
+      } else {
+        break
+      }
+    }
+
+    fullscreenContainers.set(media, container)
+    return container
+  }
+
+  function invokeFullscreenMethod (target, methodNames) {
+    const methodName = methodNames.find(name => typeof target[name] === 'function')
+    if (!methodName) return false
+
+    try {
+      const result = target[methodName]()
+      if (result && typeof result.catch === 'function') result.catch(() => {})
+      return true
+    } catch (_) {
+      return false
+    }
+  }
+
+  function isDocumentFullscreen () {
+    return Boolean(
+      document.fullscreen ||
+      document.webkitIsFullScreen ||
+      document.mozFullScreen ||
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement
+    )
+  }
+
+  function toggleFullscreen () {
+    const media = getActiveMedia()
+    if (!media) return false
+    if (runSiteControlTask('fullScreen', media)) return true
+
+    if (isDocumentFullscreen()) {
+      invokeFullscreenMethod(document, [
+        'exitFullscreen',
+        'webkitExitFullscreen',
+        'mozCancelFullScreen',
+        'msExitFullscreen'
+      ])
+    } else {
+      invokeFullscreenMethod(getFullscreenContainer(media), [
+        'requestFullscreen',
+        'webkitRequestFullScreen',
+        'mozRequestFullScreen',
+        'msRequestFullScreen'
+      ])
+    }
+    return true
+  }
+
+  function playNextVideo () {
+    const media = getActiveMedia()
+    if (!media) return false
+    runSiteControlTask('next', media)
+    return true
   }
 
   function writeNativePlaybackRate (media, nextRate) {
@@ -258,20 +465,23 @@
   }
 
   function retryPlaybackRateWrite (nextRate, revision) {
-    setTimeout(() => setTargetPlaybackRate(nextRate, {
-      silent: true,
-      lock: 600,
-      retry: false,
-      record: false,
-      revision
-    }), 600)
-    setTimeout(() => setTargetPlaybackRate(nextRate, {
-      silent: true,
-      lock: 600,
-      retry: false,
-      record: false,
-      revision
-    }), 1200)
+    playbackRateRetryTimers.forEach(clearTimeout)
+    playbackRateRetryTimers = [
+      setTimeout(() => setTargetPlaybackRate(nextRate, {
+        silent: true,
+        lock: 600,
+        retry: false,
+        record: false,
+        revision
+      }), 600),
+      setTimeout(() => setTargetPlaybackRate(nextRate, {
+        silent: true,
+        lock: 600,
+        retry: false,
+        record: false,
+        revision
+      }), 1200)
+    ]
   }
 
   function increasePlaybackRate () {
@@ -489,7 +699,7 @@
 
     Object.defineProperty = new Proxy(rawDefineProperty, {
       apply (target, thisArg, args) {
-        if (isMedia(args[0]) && args[1] === 'playbackRate') {
+        if (args[1] === 'playbackRate' && isMedia(args[0])) {
           args = args.slice()
           args[1] = '__media_controller_blocked_playbackRate__'
         }
@@ -546,16 +756,28 @@
         event.preventDefault()
         event.stopPropagation()
         decreaseVolume(event.ctrlKey ? FAST_VOLUME_STEP : VOLUME_STEP)
+      } else if (key === 'enter') {
+        if (event.ctrlKey || event.shiftKey) return
+        event.preventDefault()
+        event.stopPropagation()
+        toggleFullscreen()
+      } else if (key === 'n') {
+        if (event.ctrlKey || event.shiftKey) return
+        event.preventDefault()
+        event.stopPropagation()
+        playNextVideo()
       }
     }, true)
   }
 
   function startObserver () {
     const observer = new MutationObserver(records => {
+      let hasRemovedNodes = false
       records.forEach(record => {
         record.addedNodes.forEach(scanMediaElements)
+        if (record.removedNodes.length) hasRemovedNodes = true
       })
-      cleanupDetachedMedia()
+      if (hasRemovedNodes) cleanupDetachedMedia()
     })
 
     const start = () => {
