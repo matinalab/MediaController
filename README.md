@@ -2,7 +2,7 @@
 
 > English | [中文文档](README.zh-CN.md)
 
-Lightweight userscript for controlling HTML5 media playback speed and volume.
+Lightweight userscript for controlling playback speed and volume on HTML5 media.
 
 ## Install
 
@@ -10,21 +10,15 @@ Lightweight userscript for controlling HTML5 media playback speed and volume.
 2. Open the [latest release download](https://github.com/matinalab/MediaController/releases/latest/download/media-controller.user.js).
 3. Confirm the installation in Tampermonkey.
 
-The userscript is also available as `media-controller.user.js` in each GitHub Release.
+The installation file is also included in every GitHub Release as `media-controller.user.js`.
 
 ## Features
 
-- Increase speed with `C`.
-- Decrease speed with `X`.
-- Toggle `1x` and the last non-`1x` speed with `Z`.
-- Set or stack preset speeds with `1` - `4`.
-- Raise volume with `ArrowUp`, lower volume with `ArrowDown`.
-- Raise or lower volume by `20%` with `Ctrl + ArrowUp` / `Ctrl + ArrowDown`.
-- Use the original h5Player-style Web Audio gain path: volume enters `200%` on the first step above `100%`, then uses integer levels up to `600%`.
-- Acoustic gain is enabled directly because this focused userscript has no settings menu.
-- Keep the keyboard target speed stable during rapid key presses.
-- Apply the target speed to all `video` and `audio` elements on the page.
-- Show a small speed label at the top-left corner of the active media element.
+- Adjust playback speed from `0.1x` to `16x`.
+- Toggle, adjust, or stack preset playback speeds with keyboard shortcuts.
+- Adjust standard volume or increase it up to `600%`.
+- Support HTML5 `video` and `audio` elements.
+- Show a discreet status label at the top-left corner of the active media element.
 
 ## Shortcuts
 
@@ -42,15 +36,9 @@ The userscript is also available as `media-controller.user.js` in each GitHub Re
 | `Ctrl + ArrowUp` | Increase volume by `20%` |
 | `Ctrl + ArrowDown` | Decrease volume by `20%` |
 
-## Performance
+## Compatibility
 
-- No runtime dependencies.
-- No build step is required.
-- No global API is exposed to the page.
-- One `MutationObserver` watches for newly inserted media elements.
-- The feedback element is created only after the first visible speed change.
-- Web Audio gain is created only after volume goes above `100%`.
-- Native volume changes are persisted; gain levels are kept in memory for the current page, matching h5Player.
+Works with HTML5 media in modern browsers with Tampermonkey installed. The script has no external runtime dependencies.
 
 ## License
 
