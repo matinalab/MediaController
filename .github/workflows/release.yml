@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-latest-userscript
+  group: publish-media-controller
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check userscript syntax
-        run: node --check media-speed-controller.user.js
+        run: npm run check
 
       - name: Publish latest GitHub Release
         shell: bash
@@ -31,13 +31,14 @@ jobs:
           git push origin refs/tags/latest --force
 
           if gh release view latest >/dev/null 2>&1; then
-            gh release upload latest media-speed-controller.user.js --clobber
+            gh release delete-asset latest media-speed-controller.user.js --yes || true
+            gh release upload latest media-controller.user.js --clobber
             gh release edit latest \
               --title "Latest release" \
               --notes "Automatically updated from the latest repository revision." \
               --latest
           else
-            gh release create latest media-speed-controller.user.js \
+            gh release create latest media-controller.user.js \
               --verify-tag \
               --title "Latest release" \
               --notes "Automatically updated from the latest repository revision." \
