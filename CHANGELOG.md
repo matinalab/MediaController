@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.2
+
+- Restore the selected volume once per media source without overriding later site controls.
+- Reapply the selected playback speed when media starts playing.
+- Detect media created outside the main document tree.
+- Keep Douyu fullscreen controls aligned with the current state.
+
+## 0.4.1
+
+- Preserve the selected volume when a site switches media.
+
 ## 0.4.0
 
 - Add `Enter` to toggle fullscreen mode.

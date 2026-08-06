@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MediaController
 // @namespace    https://github.com/matinalab/MediaController
-// @version      0.4.0
+// @version      0.4.2
 // @description  Keyboard controls for HTML5 media playback.
 // @match        *://*/*
 // @icon         data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Cpath d='M18 44V20l22 12-22 12Z' fill='%23fff'/%3E%3Cpath d='M43 18h5v28h-5z' fill='%2393c5fd'/%3E%3C/svg%3E
@@ -94,10 +94,7 @@
         return true
       }
     },
-    {
-      domain: 'douyu.com',
-      fullScreen: ['div[title="退出窗口全屏"]', 'div[title="窗口全屏"]']
-    },
+    { domain: 'douyu.com', fullScreen: toggleDouyuFullscreen },
     { domain: 'chaoxing.com', fullScreen: ['.vjs-fullscreen-control'] },
     {
       domain: 'douyin.com',
@@ -113,6 +110,8 @@
   const mediaElements = new Set()
   const mediaAmplifiers = new WeakMap()
   const fullscreenContainers = new WeakMap()
+  const mediaVolumeRestoreState = new WeakSet()
+  const siteFullscreenStates = new WeakMap()
   const presetPlaybackRateState = new Map()
 
   let targetPlaybackRate = normalizeRate(readStoredValue(
@@ -125,11 +124,14 @@
     LEGACY_STORAGE_KEYS.lastPlaybackRate,
     1.5
   ))
-  let currentVolumeLevel = normalizeVolume(readStoredValue(
+  const storedVolumeLevel = normalizeVolume(readStoredValue(
     VOLUME_STORAGE_KEY,
     LEGACY_STORAGE_KEYS.volume,
     1
   ))
+  let currentVolumeLevel = storedVolumeLevel
+  let targetNativeVolume = Math.min(storedVolumeLevel, 1)
+  let hasStoredVolumePreference = hasStoredValue(VOLUME_STORAGE_KEY)
   let activeMedia = null
   let playbackRateLockUntil = 0
   const volumeLockDeadlines = new WeakMap()
@@ -210,6 +212,14 @@
     } catch (_) {}
   }
 
+  function hasStoredValue (key) {
+    try {
+      return localStorage.getItem(key) !== null
+    } catch (_) {
+      return false
+    }
+  }
+
   function isEditableTarget (target) {
     if (!target) return false
     const tag = String(target.tagName || '').toLowerCase()
@@ -218,6 +228,12 @@
 
   function isMedia (node) {
     return node instanceof HTMLMediaElement
+  }
+
+  function isMediaConnected (media) {
+    if (!media) return false
+    if (typeof media.isConnected === 'boolean') return media.isConnected
+    return document.contains(media)
   }
 
   function getSiteControlTask (taskName) {
@@ -266,6 +282,21 @@
       }
     }
     return false
+  }
+
+  function toggleDouyuFullscreen (media) {
+    const container = getFullscreenContainer(media)
+    const isFullscreen = siteFullscreenStates.get(media) === true
+    const selector = isFullscreen
+      ? 'div[title="退出窗口全屏"]'
+      : 'div[title="窗口全屏"]'
+    const control = (container && container.querySelector && container.querySelector(selector)) ||
+      document.querySelector(selector)
+    if (!control) return false
+
+    control.click()
+    siteFullscreenStates.set(media, !isFullscreen)
+    return true
   }
 
   function getFullscreenContainer (media) {
@@ -384,7 +415,7 @@
 
   function cleanupDetachedMedia () {
     mediaElements.forEach(media => {
-      if (document.contains(media)) return
+      if (isMediaConnected(media)) return
 
       const amplifier = mediaAmplifiers.get(media)
       if (amplifier && amplifier.dispose) amplifier.dispose()
@@ -401,6 +432,21 @@
     media.addEventListener('play', () => {
       activeMedia = media
       setTargetPlaybackRate(targetPlaybackRate, { silent: true, lock: 400, retry: false, record: false })
+    }, true)
+
+    media.addEventListener('loadstart', () => {
+      mediaVolumeRestoreState.delete(media)
+    }, true)
+
+    media.addEventListener('playing', () => {
+      activeMedia = media
+      setTargetPlaybackRate(targetPlaybackRate, { silent: true, lock: 1000, retry: false, record: false })
+      if (!hasStoredVolumePreference) return
+      if (mediaVolumeRestoreState.has(media)) return
+
+      writeNativeVolume(media, targetNativeVolume)
+      lockVolume(media)
+      mediaVolumeRestoreState.add(media)
     }, true)
 
     media.addEventListener('mouseenter', () => {
@@ -427,7 +473,7 @@
 
   function getActiveMedia () {
     cleanupDetachedMedia()
-    if (activeMedia && document.contains(activeMedia)) return activeMedia
+    if (activeMedia && isMediaConnected(activeMedia)) return activeMedia
 
     const candidates = Array.from(mediaElements)
     activeMedia = candidates.find(media => !media.paused) ||
@@ -457,7 +503,7 @@
     scanMediaElements(document)
     cleanupDetachedMedia()
     mediaElements.forEach(media => {
-      if (document.contains(media)) writeNativePlaybackRate(media, nextRate)
+      if (isMediaConnected(media)) writeNativePlaybackRate(media, nextRate)
     })
 
     if (!options.silent) showFeedback(FEEDBACK_TEXT.speed + targetPlaybackRate)
@@ -557,6 +603,8 @@
     }
 
     writeStoredValue(VOLUME_STORAGE_KEY, nextVolume)
+    targetNativeVolume = nextVolume
+    hasStoredVolumePreference = true
     scanMediaElements(document)
     cleanupDetachedMedia()
     mediaElements.forEach(trackedMedia => {
@@ -720,6 +768,20 @@
     })
   }
 
+  function installMediaDetectionGuard () {
+    ['play', 'pause', 'load', 'addEventListener'].forEach(methodName => {
+      const rawMethod = HTMLMediaElement.prototype[methodName]
+      if (typeof rawMethod !== 'function') return
+
+      HTMLMediaElement.prototype[methodName] = new Proxy(rawMethod, {
+        apply (target, thisArg, args) {
+          if (isMedia(thisArg)) registerMediaElement(thisArg)
+          return Reflect.apply(target, thisArg, args)
+        }
+      })
+    })
+  }
+
   function installKeybindings () {
     document.addEventListener('keydown', event => {
       if (event.defaultPrevented || event.altKey || event.metaKey) return
@@ -798,6 +860,7 @@
   installPlaybackRateGuard()
   installVolumeGuard()
   installDefinePropertyGuard()
+  installMediaDetectionGuard()
   installKeybindings()
   bindFeedbackPositionRefresh()
   startObserver()
