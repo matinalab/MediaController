@@ -1,15 +1,16 @@
-name: Publish latest userscript
+name: Publish versioned userscript
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: publish-media-controller
+  group: publish-media-controller-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -22,25 +23,40 @@ jobs:
       - name: Check userscript syntax
         run: npm run check
 
-      - name: Publish latest GitHub Release
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          userscript_version="$(node -e "const fs=require('fs'); const match=fs.readFileSync('media-controller.user.js','utf8').match(/^\/\/ @version\s+(.+)$/m); if (!match) process.exit(1); process.stdout.write(match[1].trim())")"
+
+          if [ "$package_version" != "$userscript_version" ]; then
+            echo "package.json version ($package_version) does not match userscript @version ($userscript_version)." >&2
+            exit 1
+          fi
+
+          echo "version=$package_version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$package_version" >> "$GITHUB_OUTPUT"
+
+      - name: Publish versioned GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          git tag --force latest "$GITHUB_SHA"
-          git push origin refs/tags/latest --force
-
-          if gh release view latest >/dev/null 2>&1; then
-            gh release delete-asset latest media-speed-controller.user.js --yes || true
-            gh release upload latest media-controller.user.js --clobber
-            gh release edit latest \
-              --title "Latest release" \
-              --notes "Automatically updated from the latest repository revision." \
-              --latest
-          else
-            gh release create latest media-controller.user.js \
-              --verify-tag \
-              --title "Latest release" \
-              --notes "Automatically updated from the latest repository revision." \
-              --latest
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists. Skipping publish."
+            exit 0
           fi
+
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            git tag "$RELEASE_TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+
+          gh release create "$RELEASE_TAG" media-controller.user.js \
+            --verify-tag \
+            --title "MediaController $RELEASE_VERSION" \
+            --notes "Automatically published from version $RELEASE_VERSION." \
+            --latest
