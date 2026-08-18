@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+
+- Remove the `1`-`4` preset playback-speed shortcuts.
+
 ## 0.4.2
 
 - Restore the selected volume once per media source without overriding later site controls.

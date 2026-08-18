@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MediaController
 // @namespace    https://github.com/matinalab/MediaController
-// @version      0.4.2
+// @version      0.4.3
 // @description  Keyboard controls for HTML5 media playback.
 // @match        *://*/*
 // @icon         data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Cpath d='M18 44V20l22 12-22 12Z' fill='%23fff'/%3E%3Cpath d='M43 18h5v28h-5z' fill='%2393c5fd'/%3E%3C/svg%3E
@@ -107,12 +107,20 @@
     },
     { domain: 'weibo.com', fullScreen: ['button.wbpv-fullscreen-control'] }
   ]
+  const KEY_BINDINGS = [
+    { keys: ['c'], run: increasePlaybackRate },
+    { keys: ['x'], run: decreasePlaybackRate },
+    { keys: ['z'], run: toggleDefaultPlaybackRate },
+    { keys: ['arrowup'], run: event => increaseVolume(event.ctrlKey ? FAST_VOLUME_STEP : VOLUME_STEP) },
+    { keys: ['arrowdown'], run: event => decreaseVolume(event.ctrlKey ? FAST_VOLUME_STEP : VOLUME_STEP) },
+    { keys: ['enter'], run: toggleFullscreen },
+    { keys: ['n'], run: playNextVideo }
+  ]
   const mediaElements = new Set()
   const mediaAmplifiers = new WeakMap()
   const fullscreenContainers = new WeakMap()
   const mediaVolumeRestoreState = new WeakSet()
   const siteFullscreenStates = new WeakMap()
-  const presetPlaybackRateState = new Map()
 
   let targetPlaybackRate = normalizeRate(readStoredValue(
     PLAYBACK_RATE_STORAGE_KEY,
@@ -222,8 +230,15 @@
 
   function isEditableTarget (target) {
     if (!target) return false
-    const tag = String(target.tagName || '').toLowerCase()
-    return target.isContentEditable || ['input', 'textarea', 'select'].includes(tag)
+
+    let node = target.nodeType === Node.TEXT_NODE ? target.parentNode : target
+    while (node && node !== document) {
+      const tag = String(node.tagName || '').toLowerCase()
+      if (node.isContentEditable || ['input', 'textarea', 'select'].includes(tag)) return true
+      node = node.parentNode
+    }
+
+    return false
   }
 
   function isMedia (node) {
@@ -234,6 +249,21 @@
     if (!media) return false
     if (typeof media.isConnected === 'boolean') return media.isConnected
     return document.contains(media)
+  }
+
+  function isMediaVisibleInViewport (media) {
+    if (!isMediaConnected(media) || !media.getBoundingClientRect) return false
+
+    const rect = media.getBoundingClientRect()
+    if (!rect.width || !rect.height) return false
+
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+
+    return rect.bottom > 0 &&
+      rect.right > 0 &&
+      rect.top < viewportHeight &&
+      rect.left < viewportWidth
   }
 
   function getSiteControlTask (taskName) {
@@ -484,6 +514,24 @@
     return activeMedia
   }
 
+  function getVisibleActiveMedia () {
+    cleanupDetachedMedia()
+
+    const candidates = Array.from(mediaElements)
+    const visibleCandidate = candidates.find(media => isMediaVisibleInViewport(media))
+    if (visibleCandidate) {
+      activeMedia = visibleCandidate
+      return visibleCandidate
+    }
+
+    if (activeMedia && isMediaVisibleInViewport(activeMedia)) return activeMedia
+    return null
+  }
+
+  function getShortcutBinding (key) {
+    return KEY_BINDINGS.find(binding => binding.keys.includes(key)) || null
+  }
+
   function setTargetPlaybackRate (nextRate, options = {}) {
     nextRate = normalizeRate(nextRate)
 
@@ -548,25 +596,6 @@
     }
 
     setTargetPlaybackRate(nextRate)
-  }
-
-  function setPresetPlaybackRate (presetRate) {
-    presetRate = Number(presetRate)
-    if (!presetRate || Number.isNaN(presetRate)) return
-
-    const info = presetPlaybackRateState.get(presetRate) || {
-      time: Date.now() - 1000,
-      value: presetRate
-    }
-    if (Date.now() - info.time < 300) {
-      info.value += presetRate
-    } else {
-      info.value = presetRate
-    }
-    info.time = Date.now()
-    presetPlaybackRateState.set(presetRate, info)
-
-    setTargetPlaybackRate(info.value)
   }
 
   function setVolume (nextVolume, media = getActiveMedia()) {
@@ -788,47 +817,18 @@
       if (isEditableTarget(event.target)) return
 
       const key = String(event.key || '').toLowerCase()
-      if (key === 'c') {
-        if (event.ctrlKey || event.shiftKey) return
-        event.preventDefault()
-        event.stopPropagation()
-        increasePlaybackRate()
-      } else if (key === 'x') {
-        if (event.ctrlKey || event.shiftKey) return
-        event.preventDefault()
-        event.stopPropagation()
-        decreasePlaybackRate()
-      } else if (key === 'z') {
-        if (event.ctrlKey || event.shiftKey) return
-        event.preventDefault()
-        event.stopPropagation()
-        toggleDefaultPlaybackRate()
-      } else if (/^[1-4]$/.test(key)) {
-        if (event.ctrlKey || event.shiftKey) return
-        event.preventDefault()
-        event.stopPropagation()
-        setPresetPlaybackRate(Number(key))
-      } else if (key === 'arrowup') {
-        if (event.shiftKey) return
-        event.preventDefault()
-        event.stopPropagation()
-        increaseVolume(event.ctrlKey ? FAST_VOLUME_STEP : VOLUME_STEP)
-      } else if (key === 'arrowdown') {
-        if (event.shiftKey) return
-        event.preventDefault()
-        event.stopPropagation()
-        decreaseVolume(event.ctrlKey ? FAST_VOLUME_STEP : VOLUME_STEP)
-      } else if (key === 'enter') {
-        if (event.ctrlKey || event.shiftKey) return
-        event.preventDefault()
-        event.stopPropagation()
-        toggleFullscreen()
-      } else if (key === 'n') {
-        if (event.ctrlKey || event.shiftKey) return
-        event.preventDefault()
-        event.stopPropagation()
-        playNextVideo()
-      }
+      const binding = getShortcutBinding(key)
+      if (!binding) return
+
+      const visibleMedia = getVisibleActiveMedia()
+      if (!visibleMedia) return
+
+      if ((key !== 'arrowup' && key !== 'arrowdown') && (event.ctrlKey || event.shiftKey)) return
+      if ((key === 'arrowup' || key === 'arrowdown') && event.shiftKey) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      binding.run(event, key)
     }, true)
   }
 

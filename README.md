@@ -15,7 +15,7 @@ The installation file is also included in every GitHub Release as `media-control
 ## Features
 
 - Adjust playback speed from `0.1x` to `16x`.
-- Toggle, adjust, or stack preset playback speeds with keyboard shortcuts.
+- Toggle or adjust playback speed with keyboard shortcuts.
 - Adjust standard volume or increase it up to `600%`.
 - Toggle fullscreen and play the next video with keyboard shortcuts.
 - Support HTML5 `video` and `audio` elements.
@@ -28,10 +28,6 @@ The installation file is also included in every GitHub Release as `media-control
 | `C` | Increase speed by `0.1x` |
 | `X` | Decrease speed by `0.1x` |
 | `Z` | Toggle between `1x` and the last non-`1x` speed |
-| `1` | Set / stack `1x` |
-| `2` | Set / stack `2x` |
-| `3` | Set / stack `3x` |
-| `4` | Set / stack `4x` |
 | `ArrowUp` | Increase volume by `5%` |
 | `ArrowDown` | Decrease volume by `5%` |
 | `Ctrl + ArrowUp` | Increase volume by `20%` |
