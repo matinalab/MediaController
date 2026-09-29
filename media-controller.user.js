@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MediaController
 // @namespace    https://github.com/matinalab/MediaController
-// @version      0.4.3
+// @version      0.4.4
 // @description  Keyboard controls for HTML5 media playback.
 // @match        *://*/*
 // @icon         data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Cpath d='M18 44V20l22 12-22 12Z' fill='%23fff'/%3E%3Cpath d='M43 18h5v28h-5z' fill='%2393c5fd'/%3E%3C/svg%3E
@@ -684,6 +684,23 @@
     feedbackEl.style.top = `${Math.max(0, rect.top)}px`
   }
 
+  function getFullscreenElement () {
+    return document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement ||
+      null
+  }
+
+  function mountFeedback (feedbackEl) {
+    if (!feedbackEl) return
+
+    // Fullscreen content is rendered in a top layer. Elements left under
+    // documentElement are hidden there, so keep the feedback inside it.
+    const host = getFullscreenElement() || document.documentElement
+    if (host && feedbackEl.parentNode !== host) host.appendChild(feedbackEl)
+  }
+
   function showFeedback (text) {
     let feedbackEl = document.getElementById('__media_controller_feedback__')
     if (!feedbackEl) {
@@ -710,6 +727,7 @@
       document.documentElement.appendChild(feedbackEl)
     }
 
+    mountFeedback(feedbackEl)
     feedbackEl.textContent = text
     updateFeedbackPosition(feedbackEl)
     feedbackEl.style.display = 'block'
@@ -727,12 +745,16 @@
     const refreshFeedbackPosition = () => {
       const feedbackEl = document.getElementById('__media_controller_feedback__')
       if (feedbackEl && feedbackEl.style.display === 'block') {
+        mountFeedback(feedbackEl)
         updateFeedbackPosition(feedbackEl)
       }
     }
 
     window.addEventListener('scroll', refreshFeedbackPosition, true)
     window.addEventListener('resize', refreshFeedbackPosition, true)
+    document.addEventListener('fullscreenchange', refreshFeedbackPosition, true)
+    document.addEventListener('webkitfullscreenchange', refreshFeedbackPosition, true)
+    document.addEventListener('mozfullscreenchange', refreshFeedbackPosition, true)
   }
 
   function installPlaybackRateGuard () {

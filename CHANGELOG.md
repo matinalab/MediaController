@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4
+
+- Show playback feedback while the page is in native fullscreen mode.
+- Add a checked `npm run commit` helper for local commits.
+
 ## 0.4.3
 
 - Remove the `1`-`4` preset playback-speed shortcuts.

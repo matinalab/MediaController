@@ -9,6 +9,7 @@
   },
   "license": "MIT",
   "scripts": {
-    "check": "node --check media-controller.user.js"
+    "check": "node --check media-controller.user.js",
+    "commit": "node scripts/commit.js"
   }
 }
