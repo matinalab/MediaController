@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5
+
+- Render playback feedback in the browser top layer so webpage fullscreen and high-z-index players cannot cover it.
+- Isolate feedback styles and follow media movement while the label is visible, including floating mini-players and fullscreen transitions.
+- Keep feedback within the visible viewport and recover when a site removes its overlay node.
+- Document the release process and the limitations of native video Picture-in-Picture.
+
 ## 0.4.4
 
 - Show playback feedback while the page is in native fullscreen mode.

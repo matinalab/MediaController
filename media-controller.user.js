@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MediaController
 // @namespace    https://github.com/matinalab/MediaController
-// @version      0.4.4
+// @version      0.4.5
 // @description  Keyboard controls for HTML5 media playback.
 // @match        *://*/*
 // @icon         data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Cpath d='M18 44V20l22 12-22 12Z' fill='%23fff'/%3E%3Cpath d='M43 18h5v28h-5z' fill='%2393c5fd'/%3E%3C/svg%3E
@@ -145,6 +145,11 @@
   const volumeLockDeadlines = new WeakMap()
   let isInternalPlaybackRateWrite = false
   let feedbackTimer = 0
+  let feedbackHideTimer = 0
+  let feedbackFrame = 0
+  let feedbackElement = null
+  let feedbackLabel = null
+  let feedbackFullscreenElement = null
   let playbackRateRevision = 0
   let playbackRateRetryTimers = []
 
@@ -680,81 +685,121 @@
     const media = getActiveMedia()
     if (!feedbackEl || !media || !media.getBoundingClientRect) return
     const rect = media.getBoundingClientRect()
-    feedbackEl.style.left = `${Math.max(0, rect.left)}px`
-    feedbackEl.style.top = `${Math.max(0, rect.top)}px`
+    const viewport = window.visualViewport
+    const left = viewport ? viewport.offsetLeft : 0
+    const top = viewport ? viewport.offsetTop : 0
+    const width = viewport ? viewport.width : window.innerWidth
+    const height = viewport ? viewport.height : window.innerHeight
+    const feedbackRect = feedbackEl.getBoundingClientRect()
+    const visible = rect.width > 0 && rect.height > 0 &&
+      rect.right > left && rect.bottom > top &&
+      rect.left < left + width && rect.top < top + height
+    feedbackEl.style.setProperty('visibility', visible ? 'visible' : 'hidden', 'important')
+    const nextLeft = Math.max(left, Math.min(rect.left, left + width - feedbackRect.width))
+    const nextTop = Math.max(top, Math.min(rect.top, top + height - feedbackRect.height))
+    feedbackEl.style.setProperty('left', `${nextLeft}px`, 'important')
+    feedbackEl.style.setProperty('top', `${nextTop}px`, 'important')
+
+    if (typeof feedbackEl.showPopover !== 'function') {
+      const positionedRect = feedbackEl.getBoundingClientRect()
+      const scaleX = feedbackEl.offsetWidth ? positionedRect.width / feedbackEl.offsetWidth : 1
+      const scaleY = feedbackEl.offsetHeight ? positionedRect.height / feedbackEl.offsetHeight : 1
+      feedbackEl.style.setProperty('left', `${nextLeft + (nextLeft - positionedRect.left) / (scaleX || 1)}px`, 'important')
+      feedbackEl.style.setProperty('top', `${nextTop + (nextTop - positionedRect.top) / (scaleY || 1)}px`, 'important')
+    }
   }
 
   function getFullscreenElement () {
-    return document.fullscreenElement ||
+    let fullscreenElement = document.fullscreenElement ||
       document.webkitFullscreenElement ||
       document.mozFullScreenElement ||
       document.msFullscreenElement ||
       null
+    while (fullscreenElement && fullscreenElement.shadowRoot && fullscreenElement.shadowRoot.fullscreenElement) {
+      fullscreenElement = fullscreenElement.shadowRoot.fullscreenElement
+    }
+    return fullscreenElement
   }
 
   function mountFeedback (feedbackEl) {
     if (!feedbackEl) return
 
-    // Fullscreen content is rendered in a top layer. Elements left under
-    // documentElement are hidden there, so keep the feedback inside it.
-    const host = getFullscreenElement() || document.documentElement
+    const media = getActiveMedia()
+    const fullscreenElement = getFullscreenElement()
+    if (fullscreenElement !== feedbackFullscreenElement) {
+      if (typeof feedbackEl.hidePopover === 'function' && feedbackEl.matches(':popover-open')) {
+        feedbackEl.hidePopover()
+      }
+      feedbackFullscreenElement = fullscreenElement
+    }
+    const host = typeof feedbackEl.showPopover === 'function'
+      ? document.documentElement
+      : fullscreenElement || (media && media.parentElement) || document.documentElement
     if (host && feedbackEl.parentNode !== host) host.appendChild(feedbackEl)
+    if (typeof feedbackEl.showPopover === 'function' && !feedbackEl.matches(':popover-open')) {
+      try { feedbackEl.showPopover() } catch (_) {}
+    }
   }
 
   function showFeedback (text) {
-    let feedbackEl = document.getElementById('__media_controller_feedback__')
-    if (!feedbackEl) {
-      feedbackEl = document.createElement('div')
-      feedbackEl.id = '__media_controller_feedback__'
-      feedbackEl.style.cssText = [
-        'position:fixed',
-        'z-index:999999',
-        'left:0',
-        'top:0',
-        'padding:5px 10px',
-        'border-bottom-right-radius:5px',
-        'background:rgba(0,0,0,.4)',
-        'color:#fff',
-        'font:16px/1.35 "microsoft yahei",Verdana,Geneva,sans-serif',
-        'pointer-events:none',
-        'opacity:0',
-        'display:none',
-        'transition:opacity 600ms',
-        '-webkit-font-smoothing:subpixel-antialiased',
-        '-webkit-user-select:none',
-        'user-select:none'
-      ].join(';')
-      document.documentElement.appendChild(feedbackEl)
+    if (!feedbackElement) {
+      feedbackElement = document.createElement('div')
+      feedbackElement.id = '__media_controller_feedback__'
+      feedbackElement.setAttribute('popover', 'manual')
+      const styles = {
+        all: 'initial',
+        position: 'fixed',
+        'z-index': '2147483647',
+        inset: 'auto',
+        margin: '0',
+        padding: '0',
+        border: '0',
+        width: 'max-content',
+        height: 'max-content',
+        'max-width': '100vw',
+        'pointer-events': 'none',
+        transition: 'opacity 600ms',
+        display: 'none'
+      }
+      Object.entries(styles).forEach(([property, value]) => {
+        feedbackElement.style.setProperty(property, value, 'important')
+      })
+      const shadow = feedbackElement.attachShadow({ mode: 'open' })
+      const style = document.createElement('style')
+      style.textContent = ':host::backdrop{display:none!important}span{all:initial;display:block;box-sizing:border-box;padding:5px 10px;border-bottom-right-radius:5px;background:rgba(0,0,0,.4);color:#fff;font:16px/1.35 "microsoft yahei",Verdana,Geneva,sans-serif;pointer-events:none;user-select:none;overflow:hidden}'
+      feedbackLabel = document.createElement('span')
+      shadow.append(style, feedbackLabel)
     }
 
+    const feedbackEl = feedbackElement
+    feedbackLabel.textContent = text
+    feedbackEl.style.setProperty('display', 'block', 'important')
+    feedbackEl.style.setProperty('opacity', '1', 'important')
     mountFeedback(feedbackEl)
-    feedbackEl.textContent = text
     updateFeedbackPosition(feedbackEl)
-    feedbackEl.style.display = 'block'
-    feedbackEl.style.opacity = '1'
+    if (!feedbackFrame) feedbackFrame = requestAnimationFrame(refreshFeedbackPosition)
     clearTimeout(feedbackTimer)
+    clearTimeout(feedbackHideTimer)
     feedbackTimer = setTimeout(() => {
-      feedbackEl.style.opacity = '0'
-      setTimeout(() => {
-        if (feedbackEl.style.opacity === '0') feedbackEl.style.display = 'none'
+      feedbackEl.style.setProperty('opacity', '0', 'important')
+      feedbackHideTimer = setTimeout(() => {
+        if (typeof feedbackEl.hidePopover === 'function' && feedbackEl.matches(':popover-open')) {
+          feedbackEl.hidePopover()
+        }
+        feedbackEl.style.setProperty('display', 'none', 'important')
+        cancelAnimationFrame(feedbackFrame)
+        feedbackFrame = 0
       }, 600)
     }, 900)
   }
 
-  function bindFeedbackPositionRefresh () {
-    const refreshFeedbackPosition = () => {
-      const feedbackEl = document.getElementById('__media_controller_feedback__')
-      if (feedbackEl && feedbackEl.style.display === 'block') {
-        mountFeedback(feedbackEl)
-        updateFeedbackPosition(feedbackEl)
-      }
+  function refreshFeedbackPosition () {
+    feedbackFrame = 0
+    if (feedbackElement && feedbackElement.style.display === 'block') {
+      mountFeedback(feedbackElement)
+      updateFeedbackPosition(feedbackElement)
+      feedbackFrame = requestAnimationFrame(refreshFeedbackPosition)
     }
-
-    window.addEventListener('scroll', refreshFeedbackPosition, true)
-    window.addEventListener('resize', refreshFeedbackPosition, true)
-    document.addEventListener('fullscreenchange', refreshFeedbackPosition, true)
-    document.addEventListener('webkitfullscreenchange', refreshFeedbackPosition, true)
-    document.addEventListener('mozfullscreenchange', refreshFeedbackPosition, true)
   }
 
   function installPlaybackRateGuard () {
@@ -884,6 +929,5 @@
   installDefinePropertyGuard()
   installMediaDetectionGuard()
   installKeybindings()
-  bindFeedbackPositionRefresh()
   startObserver()
 })()
